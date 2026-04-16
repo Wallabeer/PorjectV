@@ -1,0 +1,12 @@
+[project]
+name = "projectv"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "dotenv>=0.9.9",
+    "pandas>=3.0.2",
+    "requests>=2.33.1",
+    "yagmail>=0.15.293",
+]

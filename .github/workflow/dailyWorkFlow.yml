@@ -1,0 +1,32 @@
+name: Daily Stock Disposal Notify
+
+on:
+  schedule:
+    # 台灣時間 19:10 (UTC 是 11:10)
+    - cron: '00 22 * * *'
+  workflow_dispatch: # 讓你可以點擊按鈕手動測試執行
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          pip install requests pandas yagmail dotenv dateutil
+
+      - name: Run Disposal Script
+        # 這裡會讀取你在 GitHub Settings 設定的 Secrets
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_PASSWORD: ${{ secrets.GMAIL_PASSWORD }}
+          RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
+        run: python disposal_email.py
