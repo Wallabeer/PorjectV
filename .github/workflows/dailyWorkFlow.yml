@@ -17,11 +17,11 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
       - name: Install Dependencies
         run: |
-          pip install requests pandas yagmail dotenv dateutil
+          pip install requests pandas yagmail dotenv
 
       - name: Run Disposal Script
         # 這裡會讀取你在 GitHub Settings 設定的 Secrets
@@ -29,4 +29,4 @@ jobs:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_PASSWORD: ${{ secrets.GMAIL_PASSWORD }}
           RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
-        run: python disposal_email.py
+        run: python main.py

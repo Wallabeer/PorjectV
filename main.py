@@ -1,4 +1,6 @@
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import pandas as pd
 import os
 import yagmail
@@ -11,29 +13,52 @@ load_dotenv()
 # 解決證交所 SSL 驗證問題
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+def get_session_with_retry():
+    session = requests.Session()
+    
+    # 定義重試規則
+    retry_strategy = Retry(
+        total=5,                # 總共重試次數
+        backoff_factor=1,       # 等待間隔：1s, 2s, 4s, 8s, 16s (指數型增長)
+        status_forcelist=[429, 500, 502, 503, 504], # 遇到這些 HTTP 狀態碼才重試
+        allowed_methods=["GET"] # 哪些請求方法要重試
+    )
+    
+    # 將重試規則綁定到 adapter
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    
+    # 讓 session 在處理 http:// 和 https:// 時都使用這個規則
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    
+    return session
+
+# 使用範例
 def get_disposal_list():
-    """爬取網頁版資料並篩選近兩天公布標的"""
     url = "https://www.twse.com.tw/rwd/zh/announcement/punish?response=json"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-
-    today = datetime.now() - relativedelta(years=1911)
-    yesterday = today - timedelta(days=1)   # 調整為昨天，確保抓到最新資料
-    target_dates = [today.strftime('%Y%m/%d')[1:], yesterday.strftime('%Y/%m/%d')[1:]]
+    
+    # 建立帶有重試機制的 session
+    session = get_session_with_retry()
     
     try:
-        response = requests.get(url, headers=headers, timeout=30, verify=False)
-        json_data = response.json()
-        
-        if 'data' not in json_data or not json_data['data']:
-            return None
+        # 這裡的 get 只要失敗，就會自動依照規則重試，直到 5 次都失敗才拋出錯誤
+        response = session.get(url, headers=headers, timeout=10, verify=False)
+        return response.json()
+    except Exception as e:
+        print(f"最終請求失敗: {e}")
+        return None
 
-        # print(json_data)
-        # print(json_data['data'][0])
+def format_data(json_data):
         # 欄位索引：0:公布日期, 1:證券代號, 2:證券名稱, 3:起迄時間, 4:累計處置條件, 5:處置措施
         df = pd.DataFrame(json_data['data'])
-        # print(df.iloc[0])
+        
+        today = datetime.now() - relativedelta(years=1911)
+        yesterday = today - timedelta(days=1)   # 調整為昨天，確保抓到最新資料
+        target_dates = [today.strftime('%Y/%m/%d')[1:], yesterday.strftime('%Y/%m/%d')[1:]]
         print(target_dates)
-        recent_df = df[df[1].isin(target_dates)].copy()
+        recent_df = df[df[1].isin(target_dates)].iloc[:,:7].copy()
+        recent_df.sort_values(by=1, inplace=True)
         
         if recent_df.empty:
             return None 
@@ -42,7 +67,7 @@ def get_disposal_list():
         html_content = """
         <table border="1" style="border-collapse: collapse; width: 100%; font-family: sans-serif;">
             <tr style="background-color: #f2f2f2;">
-                <th>公布日期</th><th>代號</th><th>名稱</th><th>起迄時間</th><th>處置條件</th><th>處置措施</th>
+                <th>公布日期</th><th>證券代號</th><th>證券名稱</th><th>累計</th><th>處置條件</th><th>處置起迄時間</th>
             </tr>
         """
         
@@ -58,11 +83,8 @@ def get_disposal_list():
             </tr>
             """
         html_content += "</table>"
-        html_content.replace('\n', '')
-        return html_content
-    except Exception as e:
-        print(f"抓取失敗: {e}")
-        return None
+
+        return html_content.replace('\n', '')
 
 def send_email(content):
     if not content:
@@ -83,6 +105,7 @@ def send_email(content):
         print(f"Email 寄送失敗: {e}")
 
 if __name__ == "__main__":
-    data_html = get_disposal_list()
-    print(data_html if data_html else "近兩日無新公布處置股。")
-    send_email(data_html)
+    dataSource = get_disposal_list()
+    print(dataSource['title'] if dataSource else "近兩日無新公布處置股。")
+    data = format_data(dataSource) if dataSource else None
+    send_email(data)
