@@ -3,7 +3,7 @@ name: Daily Stock Disposal Notify
 on:
   schedule:
     # 台灣時間 19:10 (UTC 是 11:10)
-    - cron: '00 22 * * *'
+    - cron: '00 11 * * *'
   workflow_dispatch: # 讓你可以點擊按鈕手動測試執行
 
 jobs:
