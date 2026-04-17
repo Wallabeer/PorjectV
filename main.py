@@ -58,7 +58,7 @@ def format_data(json_data):
         target_dates = [today.strftime('%Y/%m/%d')[1:], yesterday.strftime('%Y/%m/%d')[1:]]
         print(target_dates)
         recent_df = df[df[1].isin(target_dates)].iloc[:,:7].copy()
-        recent_df.sort_values(by=1, inplace=True)
+        recent_df.sort_values(by=1, ascending=False, inplace=True)
         
         if recent_df.empty:
             return None 
@@ -93,7 +93,7 @@ def send_email(content):
 
     user = os.getenv('GMAIL_USER')
     password = os.getenv('GMAIL_PASSWORD')
-    target = os.getenv('RECEIVER_EMAIL')
+    target = os.getenv('RECEIVER_EMAIL').split(';')
 
     subject = f"【台股警訊】新進處置股彙整 ({datetime.now().strftime('%Y/%m/%d')})"
     
