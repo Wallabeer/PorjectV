@@ -8,6 +8,7 @@ import urllib3
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from dotenv import load_dotenv
+import json
 load_dotenv()
 
 # 解決證交所 SSL 驗證問題
@@ -33,11 +34,8 @@ def get_session_with_retry():
     
     return session
 
-# 使用範例
-def get_disposal_list():
-    url = "https://www.twse.com.tw/rwd/zh/announcement/punish?response=json"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-    
+def getData(session, url):
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}    
     # 建立帶有重試機制的 session
     session = get_session_with_retry()
     
@@ -49,42 +47,46 @@ def get_disposal_list():
         print(f"最終請求失敗: {e}")
         return None
 
-def format_data(json_data):
-        # 欄位索引：0:公布日期, 1:證券代號, 2:證券名稱, 3:起迄時間, 4:累計處置條件, 5:處置措施
-        df = pd.DataFrame(json_data['data'])
+def toHTMLTable(jsonData, path, fields, filterDate=False):
+    if path:
+        jsonData = jsonData[path][0]
+    df = pd.DataFrame(jsonData['data'])
+    colNames = [jsonData['fields'][field] for field in fields]
+    df = df.iloc[:, fields]
+    # df.columns = colNames
+    
+    if filterDate:
+        # Get ROC year and month/day
+        now = datetime.now()
+        roc_year = now.year - 1911
+        today_str = f"{roc_year}/{now.strftime('%m/%d')}"
+        yesterday = now - timedelta(days=1)
+        yest_roc_year = yesterday.year - 1911
+        yest_str = f"{yest_roc_year}/{yesterday.strftime('%m/%d')}"
         
-        today = datetime.now() - relativedelta(years=1911)
-        yesterday = today - timedelta(days=1)   # 調整為昨天，確保抓到最新資料
-        target_dates = [today.strftime('%Y/%m/%d')[1:], yesterday.strftime('%Y/%m/%d')[1:]]
+        target_dates = [today_str, yest_str]
         print(target_dates)
-        recent_df = df[df[1].isin(target_dates)].iloc[:,:7].copy()
-        recent_df.sort_values(by=1, ascending=False, inplace=True)
-        
-        if recent_df.empty:
-            return None 
+        # Using .str.contains or exact match is safer
+        df = df[df[1].isin(target_dates)]
+    
+    if df.empty:
+        return None 
+    
+    df.columns = colNames
+    styler = df.style.set_table_attributes(
+        'border="1" style="border-collapse: collapse; width: 100%; font-family: sans-serif;"'
+    )
 
-        # 建立 HTML 表格內容
-        html_content = """
-        <table border="1" style="border-collapse: collapse; width: 100%; font-family: sans-serif;">
-            <tr style="background-color: #f2f2f2;">
-                <th>公布日期</th><th>證券代號</th><th>證券名稱</th><th>累計</th><th>處置條件</th><th>處置起迄時間</th>
-            </tr>
-        """
-        
-        for _, row in recent_df.iterrows():
-            html_content += f"""
-            <tr>
-                <td style="padding: 8px;">{row[1]}</td>
-                <td style="padding: 8px;">{row[2]}</td>
-                <td style="padding: 8px;">{row[3]}</td>
-                <td style="padding: 8px;">{row[4]}</td>
-                <td style="padding: 8px; font-size: 0.9em;">{row[5]}</td>
-                <td style="padding: 8px; font-size: 0.9em;">{row[6]}</td>
-            </tr>
-            """
-        html_content += "</table>"
+    # 設定 Header 樣式 (tr)
+    styler.set_table_styles([
+        {'selector': 'thead tr', 'props': [('background-color', '#f2f2f2')]},
+        {'selector': 'th', 'props': [('padding', '8px'), ('text-align', 'left')]}
+    ])
 
-        return html_content.replace('\n', '')
+    # 設定單元格樣式 (td)
+    styler.set_properties(**{'padding': '8px'})
+    html_content = styler.hide(axis="index").to_html()
+    return html_content.replace('\n', '')
 
 def send_email(content):
     if not content:
@@ -95,7 +97,7 @@ def send_email(content):
     password = os.getenv('GMAIL_PASSWORD')
     target = os.getenv('RECEIVER_EMAIL').split(';')
 
-    subject = f"【台股警訊】新進處置股彙整 ({datetime.now().strftime('%Y/%m/%d')})"
+    subject = f"【台股警訊】新進處置/注意股彙整 ({datetime.now().strftime('%Y/%m/%d')})"
     
     try:
         yag = yagmail.SMTP(user, password)
@@ -104,8 +106,28 @@ def send_email(content):
     except Exception as e:
         print(f"Email 寄送失敗: {e}")
 
+def main():
+    configs = json.loads(os.getenv('SRC'))
+    html = ''
+    
+    # One session for all requests - efficient!
+    with get_session_with_retry() as session:
+        for config in configs['source']:
+            print(f"-- fetching {config['name']} --")
+            
+            # Pass the session here
+            data = getData(session, config['url'])
+            
+            if data and data.get('stat') == 'OK': # Check TWSE success status
+                isFilter = config.get('filter') == 'True'
+                html_table = toHTMLTable(data, config['path'], config['fields'], isFilter)
+                
+                html += f"<h2>{config['name']}</h2>"
+                html += html_table if html_table else "<p>近期無新處置資料。</p>"
+            else:
+                html += f"<h2>{config['name']}</h2><p>無法取得資料或目前無資料。</p>"
+    
+    send_email(html)
+
 if __name__ == "__main__":
-    dataSource = get_disposal_list()
-    print(dataSource['title'] if dataSource else "近兩日無新公布處置股。")
-    data = format_data(dataSource) if dataSource else None
-    send_email(data)
+    main()
