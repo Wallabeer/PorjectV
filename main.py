@@ -20,7 +20,7 @@ def get_session_with_retry():
     # 定義重試規則
     retry_strategy = Retry(
         total=5,                # 總共重試次數
-        backoff_factor=1,       # 等待間隔：1s, 2s, 4s, 8s, 16s (指數型增長)
+        backoff_factor=3,       # 等待間隔：1s, 2s, 4s, 8s, 16s (指數型增長)
         status_forcelist=[429, 500, 502, 503, 504], # 遇到這些 HTTP 狀態碼才重試
         allowed_methods=["GET"] # 哪些請求方法要重試
     )
@@ -36,12 +36,17 @@ def get_session_with_retry():
 
 def getData(session, url):
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}    
+    # headers = { 
+    #         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    #         "Referer": "https://www.tpex.org.tw/www/zh-tw/bulletin/warning"
+    #       }
     # 建立帶有重試機制的 session
     session = get_session_with_retry()
     
     try:
         # 這裡的 get 只要失敗，就會自動依照規則重試，直到 5 次都失敗才拋出錯誤
         response = session.get(url, headers=headers, timeout=10, verify=False)
+        print(response.status_code)
         return response.json()
     except Exception as e:
         print(f"最終請求失敗: {e}")
@@ -67,7 +72,7 @@ def toHTMLTable(jsonData, path, fields, filterDate=False):
         target_dates = [today_str, yest_str]
         print(target_dates)
         # Using .str.contains or exact match is safer
-        df = df[df[1].isin(target_dates)]
+        df = df[df[1].isin(target_dates)].sort_values(by=1, ascending=False)
     
     if df.empty:
         return None 
