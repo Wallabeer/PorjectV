@@ -41,7 +41,7 @@ def getData(session, url):
     #         "Referer": "https://www.tpex.org.tw/www/zh-tw/bulletin/warning"
     #       }
     # 建立帶有重試機制的 session
-    session = get_session_with_retry()
+    # session = get_session_with_retry()
     
     try:
         # 這裡的 get 只要失敗，就會自動依照規則重試，直到 5 次都失敗才拋出錯誤
@@ -123,7 +123,7 @@ def main():
             # Pass the session here
             data = getData(session, config['url'])
             
-            if data and data.get('stat') == 'OK': # Check TWSE success status
+            if data and data.get('stat').casefold() == 'OK'.casefold(): # Check TWSE success status
                 isFilter = config.get('filter') == 'True'
                 html_table = toHTMLTable(data, config['path'], config['fields'], isFilter)
                 
