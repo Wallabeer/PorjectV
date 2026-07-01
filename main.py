@@ -52,15 +52,15 @@ def getData(session, url):
         print(f"最終請求失敗: {e}")
         return None
 
-def toHTMLTable(jsonData, path, fields, filterDate=False):
+def toHTMLTable(jsonData, path, fields, filterByDate=False, filterByDue=False):
     if path:
         jsonData = jsonData[path][0]
     df = pd.DataFrame(jsonData['data'])
     colNames = [jsonData['fields'][field] for field in fields]
     df = df.iloc[:, fields]
-    # df.columns = colNames
+    df.columns = pd.RangeIndex(len(df.columns))
     
-    if filterDate:
+    if filterByDate:
         # Get ROC year and month/day
         now = datetime.now()
         roc_year = now.year - 1911
@@ -72,8 +72,37 @@ def toHTMLTable(jsonData, path, fields, filterDate=False):
         target_dates = [today_str, yest_str]
         print(target_dates)
         # Using .str.contains or exact match is safer
-        df = df[df[1].isin(target_dates)].sort_values(by=1, ascending=False)
+        df = df[df[0].isin(target_dates)].sort_values(by=1, ascending=False)
     
+    if filterByDue:
+        df = df.loc[df.groupby(1)[0].idxmax()]
+        # 處置起迄時間在最後一欄
+        def parse_roc_date(date_str):
+            # 115/07/13 -> 2026/07/13
+            y, m, d = date_str.split('/')
+            return datetime(int(y) + 1911, int(m), int(d))
+        
+        today = datetime.now().date()
+        tomorrow = today + timedelta(days=1)
+        # after_tomorrow = today + timedelta(days=2)
+        
+        due_col = df.columns[-1]  # 處置起迄時間
+        def get_due_date(val):
+            try:
+                end = val.replace('～','~').split('~')[-1].strip()
+                return parse_roc_date(end).date()
+            except:
+                return None
+        df['到期日'] = df[due_col].apply(get_due_date)
+        # 明日出關: 到期日==今天
+        df_tomorrow = df[df['到期日'] == today].copy()
+        # 後日出關: 到期日==明天
+        df_after = df[df['到期日'] == tomorrow].copy()
+        # 合併排序
+        df = pd.concat([df_tomorrow, df_after]).sort_values(by='到期日')
+        colNames.append('到期日')  # Add the new column name to colNames    
+        # df = df.drop(columns=['到期日'])
+
     if df.empty:
         return None 
     
@@ -124,8 +153,9 @@ def main():
             data = getData(session, config['url'])
             
             if data and data.get('stat').casefold() == 'OK'.casefold(): # Check TWSE success status
-                isFilter = config.get('filter') == 'True'
-                html_table = toHTMLTable(data, config['path'], config['fields'], isFilter)
+                isFilterByDate = config.get('filterbyDate') == 'True'
+                isFilterByDue = config.get('filterByDue') == 'True'
+                html_table = toHTMLTable(data, config['path'], config['fields'], isFilterByDate, isFilterByDue)
                 
                 html += f"<h2>{config['name']}</h2>"
                 html += html_table if html_table else "<p>近期無新處置資料。</p>"
