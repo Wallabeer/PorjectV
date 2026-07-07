@@ -30,4 +30,4 @@ jobs:
           GMAIL_PASSWORD: ${{ secrets.GMAIL_PASSWORD }}
           RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
           SRC: ${{ secrets.SRC }}
-        run: python main.py
+        run: python src/main.py
