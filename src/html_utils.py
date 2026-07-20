@@ -17,6 +17,7 @@ def toHTMLTable(jsonData, path, fields, filterByDate=False, filterByDue=False):
         yest_str = f"{yest_roc_year}/{yesterday.strftime('%m/%d')}"
         target_dates = [today_str, yest_str]
         print(target_dates)
+        df[0] = df[0].str.lstrip('*') 
         df = df[df[0].isin(target_dates)].sort_values(by=0, ascending=False)
     if filterByDue:
         df = df.loc[df.groupby(1)[0].idxmax()]
