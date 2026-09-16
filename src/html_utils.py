@@ -2,9 +2,14 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 def toHTMLTable(jsonData, path, fields, filterByDate=False, filterByDue=False):
-    if path:
+    if path: #上櫃
+        if jsonData[path][0].get('totalCount', 1) == 0: #上櫃注意股髒資料
+            return None
         jsonData = jsonData[path][0]
+
     df = pd.DataFrame(jsonData['data'])
+    if df.empty:
+        return None
     colNames = [jsonData['fields'][field] for field in fields]
     df = df.iloc[:, fields]
     df.columns = pd.RangeIndex(len(df.columns))

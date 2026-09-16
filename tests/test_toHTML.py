@@ -16,3 +16,17 @@ if __name__ == "__main__":
         mock_datetime.side_effect = lambda *args, **kw: datetime(*args, **kw)
         html = toHTMLTable(jsonData, path, fields, filterByDate, filterByDue)
     print(html if html else "No data returned.")
+
+
+def test_tohtml():
+    with open("data/market1_test.json", encoding="utf-8") as f:
+        jsonData = json.load(f)
+    path = "tables"
+    fields = [1, 2, 3, 4, 5]
+    filterByDate = False
+    filterByDue = True
+    with patch("src.html_utils.datetime") as mock_datetime:
+        mock_datetime.now.return_value = datetime(2026, 7, 1)
+        mock_datetime.side_effect = lambda *args, **kw: datetime(*args, **kw)
+        html = toHTMLTable(jsonData, path, fields, filterByDate, filterByDue)
+    assert html is not None
